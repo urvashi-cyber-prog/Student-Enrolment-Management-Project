@@ -1,0 +1,157 @@
+--  Create Database
+
+CREATE DATABASE IF NOT EXISTS college_db;
+USE college_db;
+
+--  Drop existing tables (if any)
+
+DROP TABLE IF EXISTS Enrollment;
+DROP TABLE IF EXISTS Course;
+DROP TABLE IF EXISTS Student;
+
+--  Student Table
+
+CREATE TABLE Student (
+    student_id INT PRIMARY KEY AUTO_INCREMENT,
+    student_name VARCHAR(50) NOT NULL,
+    department VARCHAR(30) NOT NULL
+);
+
+--  Course Table
+
+CREATE TABLE Course (
+    course_id INT PRIMARY KEY AUTO_INCREMENT,
+    course_name VARCHAR(50) NOT NULL,
+    credits INT NOT NULL,
+    max_students INT NOT NULL
+);
+
+--  Enrollment Table
+-- ==============================================
+CREATE TABLE Enrollment (
+    enroll_id INT PRIMARY KEY AUTO_INCREMENT,
+    student_id INT,
+    course_id INT,
+    grade CHAR(2),
+    FOREIGN KEY (student_id) REFERENCES Student(student_id) ON DELETE CASCADE,
+    FOREIGN KEY (course_id) REFERENCES Course(course_id) ON DELETE CASCADE
+);
+
+-- ==============================================
+--  Insert Sample Data
+-- ==============================================
+INSERT INTO Student (student_name, department)
+VALUES 
+('Amit Kumar', 'Computer Science'),
+('Neha Sharma', 'Information Technology'),
+('Ravi Singh', 'Electronics');
+
+INSERT INTO Course (course_name, credits, max_students)
+VALUES
+('Database Systems', 4, 2),
+('Operating Systems', 3, 3),
+('Computer Networks', 3, 2);
+
+-- ==============================================
+--  Stored Procedure: Enroll Student
+-- ==============================================
+DELIMITER //
+CREATE PROCEDURE enroll_student(IN p_student_id INT, IN p_course_id INT)
+BEGIN
+    DECLARE v_count INT;
+    DECLARE v_max INT;
+
+    SELECT COUNT(*) INTO v_count FROM Enrollment WHERE course_id = p_course_id;
+    SELECT max_students INTO v_max FROM Course WHERE course_id = p_course_id;
+
+    IF v_count >= v_max THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '❌ Course enrollment limit reached!';
+    ELSE
+        INSERT INTO Enrollment (student_id, course_id, grade)
+        VALUES (p_student_id, p_course_id, NULL);
+    END IF;
+END //
+DELIMITER ;
+
+-- ==============================================
+--  Function: Calculate GPA
+-- ==============================================
+DELIMITER //
+CREATE FUNCTION calculate_gpa(p_student_id INT)
+RETURNS DECIMAL(4,2)
+DETERMINISTIC
+BEGIN
+    DECLARE v_points DECIMAL(6,2) DEFAULT 0;
+    DECLARE v_credits INT DEFAULT 0;
+    DECLARE v_grade CHAR(2);
+    DECLARE v_credit INT;
+
+    DECLARE done INT DEFAULT 0;
+    DECLARE cur CURSOR FOR
+        SELECT e.grade, c.credits
+        FROM Enrollment e
+        JOIN Course c ON e.course_id = c.course_id
+        WHERE e.student_id = p_student_id;
+
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = 1;
+
+    OPEN cur;
+    read_loop: LOOP
+        FETCH cur INTO v_grade, v_credit;
+        IF done THEN
+            LEAVE read_loop;
+        END IF;
+
+        CASE v_grade
+            WHEN 'A' THEN SET v_points = v_points + (4 * v_credit);
+            WHEN 'B' THEN SET v_points = v_points + (3 * v_credit);
+            WHEN 'C' THEN SET v_points = v_points + (2 * v_credit);
+            WHEN 'D' THEN SET v_points = v_points + (1 * v_credit);
+            WHEN 'F' THEN SET v_points = v_points + (0 * v_credit);
+        END CASE;
+        SET v_credits = v_credits + v_credit;
+    END LOOP;
+
+    CLOSE cur;
+    RETURN IFNULL(ROUND(v_points / NULLIF(v_credits, 0), 2), 0);
+END //
+DELIMITER ;
+
+-- ==============================================
+--  Trigger: Prevent Duplicate Enrollment
+DELIMITER //
+CREATE TRIGGER trg_no_duplicate_enrollment
+BEFORE INSERT ON Enrollment
+FOR EACH ROW
+BEGIN
+    DECLARE v_exists INT;
+    SELECT COUNT(*) INTO v_exists
+    FROM Enrollment
+    WHERE student_id = NEW.student_id AND course_id = NEW.course_id;
+
+    IF v_exists > 0 THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '❌ Student already enrolled in this course!';
+    END IF;
+END //
+DELIMITER ;
+
+--  Test the Procedure & Function
+
+CALL enroll_student(1, 1);
+CALL enroll_student(2, 1);
+
+-- Try exceeding the limit (should raise an error)
+-- CALL enroll_student(3, 1);
+
+-- Assign Grades
+UPDATE Enrollment SET grade = 'A' WHERE student_id = 1 AND course_id = 1;
+UPDATE Enrollment SET grade = 'B' WHERE student_id = 2 AND course_id = 1;
+
+-- Calculate GPA
+SELECT student_id, calculate_gpa(student_id) AS GPA FROM Student;
+
+-- View Enrollments
+SELECT e.enroll_id, s.student_name, c.course_name, e.grade
+FROM Enrollment e
+JOIN Student s ON e.student_id = s.student_id
+JOIN Course c ON e.course_id = c.course_id;      
