@@ -1,0 +1,335 @@
+import tkinter as tk
+from tkinter import ttk, messagebox
+import mysql.connector
+
+
+#  Database Connection
+def connect_db():
+    try:
+        conn = mysql.connector.connect(
+            host="localhost",
+            user="root",
+            password="Root#DB$Strong98",  # change this to your actual MySQL password
+            database="college_db"
+        )
+        return conn
+    except mysql.connector.Error as err:
+        messagebox.showerror("Database Error", f"Error: {err}")
+        return None
+
+
+
+#  STUDENT FUNCTIONS
+
+def add_student():
+    name = entry_name.get()
+    dept = entry_dept.get()
+    if not name or not dept:
+        messagebox.showwarning("Warning", "Please fill all fields.")
+        return
+    conn = connect_db()
+    if conn:
+        cur = conn.cursor()
+        cur.execute("INSERT INTO Student (student_name, department) VALUES (%s, %s)", (name, dept))
+        conn.commit()
+        conn.close()
+        messagebox.showinfo("Success", "✅ Student added successfully!")
+        clear_student_fields()
+        view_students()
+
+def update_student():
+    sid = entry_sid.get()
+    name = entry_name.get()
+    dept = entry_dept.get()
+    if not sid:
+        messagebox.showwarning("Warning", "Enter Student ID to update.")
+        return
+    conn = connect_db()
+    if conn:
+        cur = conn.cursor()
+        cur.execute("UPDATE Student SET student_name=%s, department=%s WHERE student_id=%s", (name, dept, sid))
+        conn.commit()
+        conn.close()
+        messagebox.showinfo("Updated", "🔄 Student record updated!")
+        clear_student_fields()
+        view_students()
+
+def delete_student():
+    sid = entry_sid.get()
+    if not sid:
+        messagebox.showwarning("Warning", "Enter Student ID to delete.")
+        return
+    conn = connect_db()
+    if conn:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM Student WHERE student_id=%s", (sid,))
+        conn.commit()
+        conn.close()
+        messagebox.showinfo("Deleted", "❌ Student record deleted!")
+        clear_student_fields()
+        view_students()
+
+def clear_student_fields():
+    entry_sid.delete(0, tk.END)
+    entry_name.delete(0, tk.END)
+    entry_dept.delete(0, tk.END)
+
+
+
+#  COURSE FUNCTIONS
+
+def add_course():
+    cname = entry_cname.get()
+    credits = entry_credits.get()
+    maxs = entry_max.get()
+    if not cname or not credits or not maxs:
+        messagebox.showwarning("Warning", "Please fill all fields.")
+        return
+    conn = connect_db()
+    if conn:
+        cur = conn.cursor()
+        cur.execute("INSERT INTO Course (course_name, credits, max_students) VALUES (%s, %s, %s)",
+                    (cname, credits, maxs))
+        conn.commit()
+        conn.close()
+        messagebox.showinfo("Success", "✅ Course added successfully!")
+        clear_course_fields()
+        view_courses()
+
+def update_course():
+    cid = entry_cid.get()
+    cname = entry_cname.get()
+    credits = entry_credits.get()
+    maxs = entry_max.get()
+    if not cid:
+        messagebox.showwarning("Warning", "Enter Course ID to update.")
+        return
+    conn = connect_db()
+    if conn:
+        cur = conn.cursor()
+        cur.execute("UPDATE Course SET course_name=%s, credits=%s, max_students=%s WHERE course_id=%s",
+                    (cname, credits, maxs, cid))
+        conn.commit()
+        conn.close()
+        messagebox.showinfo("Updated", "🔄 Course record updated!")
+        clear_course_fields()
+        view_courses()
+
+def delete_course():
+    cid = entry_cid.get()
+    if not cid:
+        messagebox.showwarning("Warning", "Enter Course ID to delete.")
+        return
+    conn = connect_db()
+    if conn:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM Course WHERE course_id=%s", (cid,))
+        conn.commit()
+        conn.close()
+        messagebox.showinfo("Deleted", "❌ Course deleted successfully!")
+        clear_course_fields()
+        view_courses()
+
+def clear_course_fields():
+    entry_cid.delete(0, tk.END)
+    entry_cname.delete(0, tk.END)
+    entry_credits.delete(0, tk.END)
+    entry_max.delete(0, tk.END)
+
+
+#  ENROLLMENT
+
+def enroll_student():
+    sid = entry_esid.get()
+    cid = entry_ecid.get()
+    if not sid or not cid:
+        messagebox.showwarning("Warning", "Enter both Student ID and Course ID.")
+        return
+    conn = connect_db()
+    if conn:
+        cur = conn.cursor()
+        try:
+            cur.callproc("enroll_student", (sid, cid))
+            conn.commit()
+            messagebox.showinfo("Success", "✅ Student enrolled successfully!")
+        except mysql.connector.Error as err:
+            messagebox.showerror("Error", f"❌ {err.msg}")
+        conn.close()
+        view_enrollments()
+        view_gpa()
+
+
+
+#  VIEW DATA
+
+def view_students():
+    conn = connect_db()
+    if conn:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM Student")
+        rows = cur.fetchall()
+        conn.close()
+        tree_students.delete(*tree_students.get_children())
+        for r in rows:
+            tree_students.insert("", tk.END, values=r)
+
+def view_courses():
+    conn = connect_db()
+    if conn:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM Course")
+        rows = cur.fetchall()
+        conn.close()
+        tree_courses.delete(*tree_courses.get_children())
+        for r in rows:
+            tree_courses.insert("", tk.END, values=r)
+
+def view_enrollments():
+    conn = connect_db()
+    if conn:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT e.enroll_id, s.student_name, c.course_name, e.grade
+            FROM Enrollment e
+            JOIN Student s ON e.student_id = s.student_id
+            JOIN Course c ON e.course_id = c.course_id
+        """)
+        rows = cur.fetchall()
+        conn.close()
+        tree_enroll.delete(*tree_enroll.get_children())
+        for r in rows:
+            tree_enroll.insert("", tk.END, values=r)
+
+def view_gpa():
+    conn = connect_db()
+    if conn:
+        cur = conn.cursor()
+        cur.execute("SELECT student_id, student_name FROM Student")
+        students = cur.fetchall()
+        conn.close()
+        tree_gpa.delete(*tree_gpa.get_children())
+        conn = connect_db()
+        if conn:
+            cur = conn.cursor()
+            for sid, sname in students:
+                cur.execute("SELECT calculate_gpa(%s)", (sid,))
+                gpa = cur.fetchone()[0]
+                tree_gpa.insert("", tk.END, values=(sid, sname, gpa))
+            conn.close()
+
+
+
+#  UI DESIGN
+
+root = tk.Tk()
+root.title("🎓 College Enrollment System")
+root.geometry("1050x750")
+root.configure(bg="#f8f9fa")
+
+title = tk.Label(root, text="College Enrollment System", font=("Arial", 22, "bold"), bg="#007BFF", fg="white")
+title.pack(fill=tk.X, pady=5)
+
+notebook = ttk.Notebook(root)
+notebook.pack(fill="both", expand=True, padx=10, pady=10)
+
+
+#  STUDENTS TAB
+
+frame_student = ttk.Frame(notebook)
+notebook.add(frame_student, text="Students")
+
+tk.Label(frame_student, text="Student ID:").grid(row=0, column=0, padx=10, pady=5)
+entry_sid = tk.Entry(frame_student)
+entry_sid.grid(row=0, column=1)
+
+tk.Label(frame_student, text="Student Name:").grid(row=1, column=0, padx=10, pady=5)
+entry_name = tk.Entry(frame_student)
+entry_name.grid(row=1, column=1)
+
+tk.Label(frame_student, text="Department:").grid(row=2, column=0, padx=10, pady=5)
+entry_dept = tk.Entry(frame_student)
+entry_dept.grid(row=2, column=1)
+
+tk.Button(frame_student, text="Add", command=add_student, bg="#28a745", fg="white").grid(row=3, column=0, pady=5)
+tk.Button(frame_student, text="Update", command=update_student, bg="#ffc107").grid(row=3, column=1, pady=5)
+tk.Button(frame_student, text="Delete", command=delete_student, bg="#dc3545", fg="white").grid(row=3, column=2, pady=5)
+tk.Button(frame_student, text="Refresh", command=view_students, bg="#007BFF", fg="white").grid(row=3, column=3, pady=5)
+
+tree_students = ttk.Treeview(frame_student, columns=("ID", "Name", "Department"), show="headings", height=15)
+for col in ("ID", "Name", "Department"):
+    tree_students.heading(col, text=col)
+    tree_students.column(col, width=180)
+tree_students.grid(row=4, column=0, columnspan=4, padx=10, pady=10)
+
+
+#  COURSES TAB
+
+frame_course = ttk.Frame(notebook)
+notebook.add(frame_course, text="Courses")
+
+tk.Label(frame_course, text="Course ID:").grid(row=0, column=0, padx=10, pady=5)
+entry_cid = tk.Entry(frame_course)
+entry_cid.grid(row=0, column=1)
+
+tk.Label(frame_course, text="Course Name:").grid(row=1, column=0, padx=10, pady=5)
+entry_cname = tk.Entry(frame_course)
+entry_cname.grid(row=1, column=1)
+
+tk.Label(frame_course, text="Credits:").grid(row=2, column=0, padx=10, pady=5)
+entry_credits = tk.Entry(frame_course)
+entry_credits.grid(row=2, column=1)
+
+tk.Label(frame_course, text="Max Students:").grid(row=3, column=0, padx=10, pady=5)
+entry_max = tk.Entry(frame_course)
+entry_max.grid(row=3, column=1)
+
+tk.Button(frame_course, text="Add", command=add_course, bg="#28a745", fg="white").grid(row=4, column=0, pady=5)
+tk.Button(frame_course, text="Update", command=update_course, bg="#ffc107").grid(row=4, column=1, pady=5)
+tk.Button(frame_course, text="Delete", command=delete_course, bg="#dc3545", fg="white").grid(row=4, column=2, pady=5)
+tk.Button(frame_course, text="Refresh", command=view_courses, bg="#007BFF", fg="white").grid(row=4, column=3, pady=5)
+
+tree_courses = ttk.Treeview(frame_course, columns=("ID", "Name", "Credits", "Max Students"), show="headings", height=15)
+for col in ("ID", "Name", "Credits", "Max Students"):
+    tree_courses.heading(col, text=col)
+    tree_courses.column(col, width=150)
+tree_courses.grid(row=5, column=0, columnspan=4, padx=10, pady=10)
+
+#  ENROLLMENTS TAB
+
+frame_enroll = ttk.Frame(notebook)
+notebook.add(frame_enroll, text="Enrollments")
+
+tk.Label(frame_enroll, text="Student ID:").grid(row=0, column=0, padx=10, pady=5)
+entry_esid = tk.Entry(frame_enroll)
+entry_esid.grid(row=0, column=1)
+
+tk.Label(frame_enroll, text="Course ID:").grid(row=1, column=0, padx=10, pady=5)
+entry_ecid = tk.Entry(frame_enroll)
+entry_ecid.grid(row=1, column=1)
+
+tk.Button(frame_enroll, text="Enroll", command=enroll_student, bg="#ffc107").grid(row=2, column=0, pady=10)
+tk.Button(frame_enroll, text="Refresh", command=view_enrollments, bg="#007BFF", fg="white").grid(row=2, column=1, pady=10)
+
+tree_enroll = ttk.Treeview(frame_enroll, columns=("Enroll ID", "Student", "Course", "Grade"), show="headings", height=15)
+for col in ("Enroll ID", "Student", "Course", "Grade"):
+    tree_enroll.heading(col, text=col)
+    tree_enroll.column(col, width=180)
+tree_enroll.grid(row=3, column=0, columnspan=3, padx=10, pady=10)
+
+
+#  GPA TAB
+
+frame_gpa = ttk.Frame(notebook)
+notebook.add(frame_gpa, text="GPA Report")
+
+tk.Button(frame_gpa, text="Refresh GPA", command=view_gpa, bg="#007BFF", fg="white").pack(pady=10)
+tree_gpa = ttk.Treeview(frame_gpa, columns=("Student ID", "Student Name", "GPA"), show="headings", height=15)
+for col in ("Student ID", "Student Name", "GPA"):
+    tree_gpa.heading(col, text=col)
+    tree_gpa.column(col, width=250)
+tree_gpa.pack(fill="both", padx=10, pady=10)
+
+
+#  Run UI
+
+root.mainloop()
